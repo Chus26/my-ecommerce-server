@@ -442,14 +442,82 @@ exports.adminAddUser = async (req, res, next) => {
 };
 
 // === Admin cập nhật người dùng ===
+// exports.adminUpdateUser = async (req, res, next) => {
+//   const { userId } = req.params;
+//   const { fullName, email, phoneNumber, role, newPassword } = req.body;
+
+//   if (!mongoose.Types.ObjectId.isValid(userId)) {
+//     return res.status(400).json({ message: "ID người dùng không hợp lệ." });
+//   }
+
+//   if (req.userId === userId) {
+//     return res.status(403).json({ message: "Bạn không thể tự cập nhật chính mình qua giao diện này." });
+//   }
+
+//   try {
+//     const user = await User.findById(userId);
+//     if (!user) {
+//       return res.status(404).json({ message: "Không tìm thấy người dùng." });
+//     }
+
+//     user.fullName = fullName.trim();
+//     user.email = email;
+//     user.phoneNumber = phoneNumber;
+
+//     if (role && ["user", "admin", "consultant"].includes(role)) {
+//       user.role = role;
+//     }
+
+//     if (newPassword && newPassword.trim().length >= 6) {
+//       user.password = await bcrypt.hash(newPassword, 10);
+//     } else if (newPassword && newPassword.trim().length > 0) {
+//       return res.status(422).json({
+//         errors: [{ path: "newPassword", msg: "Mật khẩu mới phải có ít nhất 6 ký tự." }],
+//       });
+//     }
+
+//     await user.save();
+
+//     res.status(200).json({
+//       message: "Cập nhật thông tin người dùng thành công!",
+//       user: {
+//         _id: user._id,
+//         fullName: user.fullName,
+//         email: user.email,
+//         role: user.role,
+//         phoneNumber: user.phoneNumber,
+//       },
+//     });
+//   } catch (error) {
+//     if (error.code === 11000) {
+//       const err = new Error("Email này đã được sử dụng bởi người dùng khác.");
+//       err.httpStatus = 409;
+//       return next(err);
+//     }
+//     const err = new Error(error);
+//     err.httpStatus = 500;
+//     next(err);
+//   }
+// };
+
+// === Admin cập nhật người dùng ===
 exports.adminUpdateUser = async (req, res, next) => {
   const { userId } = req.params;
-  const { fullName, email, phoneNumber, role, newPassword } = req.body;
+  // Lấy cả newPassword và password (để dự phòng trường hợp frontend gửi key khác nhau)
+  const { fullName, email, phoneNumber, role, newPassword, password } = req.body;
+
+  // Xác định mật khẩu muốn đổi là cái nào (ưu tiên newPassword, nếu không có thì lấy password)
+  const passwordToUpdate = newPassword || password;
+
+  // In ra để debug xem Frontend gửi gì lên
+  console.log("Admin update body:", req.body);
+  console.log("Password detected:", passwordToUpdate);
 
   if (!mongoose.Types.ObjectId.isValid(userId)) {
     return res.status(400).json({ message: "ID người dùng không hợp lệ." });
   }
 
+  // Chặn tự sửa chính mình (để tránh Admin tự tước quyền admin của mình hoặc tự khóa mình)
   if (req.userId === userId) {
     return res.status(403).json({ message: "Bạn không thể tự cập nhật chính mình qua giao diện này." });
   }
@@ -460,21 +528,29 @@ exports.adminUpdateUser = async (req, res, next) => {
       return res.status(404).json({ message: "Không tìm thấy người dùng." });
     }
 
-    user.fullName = fullName.trim();
-    user.email = email;
-    user.phoneNumber = phoneNumber;
+    // Cập nhật thông tin cơ bản
+    user.fullName = fullName ? fullName.trim() : user.fullName;
+    user.email = email || user.email;
+    user.phoneNumber = phoneNumber || user.phoneNumber;
 
+    // Cập nhật Role
     if (role && ["user", "admin", "consultant"].includes(role)) {
       user.role = role;
     }
 
-    if (newPassword && newPassword.trim().length >= 6) {
-      user.password = await bcrypt.hash(newPassword, 10);
-    } else if (newPassword && newPassword.trim().length > 0) {
+    // === LOGIC CẬP NHẬT MẬT KHẨU ===
+    // Kiểm tra biến passwordToUpdate thay vì chỉ newPassword
+    if (passwordToUpdate && passwordToUpdate.trim().length >= 6) {
+      console.log("Đang tiến hành mã hóa mật khẩu mới...");
+      user.password = await bcrypt.hash(passwordToUpdate, 10);
+    } 
+    // Nếu có gửi mật khẩu nhưng quá ngắn
+    else if (passwordToUpdate && passwordToUpdate.trim().length > 0) {
       return res.status(422).json({
-        errors: [{ path: "newPassword", msg: "Mật khẩu mới phải có ít nhất 6 ký tự." }],
+        errors: [{ path: "password", msg: "Mật khẩu mới phải có ít nhất 6 ký tự." }],
       });
     }
+    // Nếu passwordToUpdate là rỗng hoặc null -> Bỏ qua, giữ mật khẩu cũ
 
     await user.save();
 
