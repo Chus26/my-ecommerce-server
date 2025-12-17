@@ -1,32 +1,37 @@
-const send = require("gmail-send")({
-  user: "danvulop8@gmail.com",
-  pass: process.env.GMAIL_PASS,
+// Thay thế toàn bộ nội dung file cũ bằng đoạn này:
+const nodemailer = require("nodemailer");
+
+// Tạo transporter với cấu hình Port 587 (TLS) để không bị Render chặn
+const transporter = nodemailer.createTransport({
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false, // false cho port 587, true cho port 465
+  auth: {
+    user: "danvulop8@gmail.com",
+    // Đảm bảo biến môi trường này đã được đặt trên Render
+    pass: process.env.GMAIL_PASS, 
+  },
+  tls: {
+    rejectUnauthorized: false // Giúp tránh lỗi chứng chỉ SSL trên server
+  }
 });
 
+// Tạo hàm send tương thích với cách gọi cũ của bạn
+const send = async ({ to, subject, html }) => {
+  try {
+    const info = await transporter.sendMail({
+      from: '"Boutique Shop" <danvulop8@gmail.com>',
+      to: to,
+      subject: subject,
+      html: html,
+    });
+    console.log("✅ Email sent successfully:", info.messageId);
+    return info;
+  } catch (error) {
+    console.error("❌ Error sending email:", error);
+    // Không ném lỗi để tránh crash server nếu mail lỗi
+    return null; 
+  }
+};
+
 module.exports = send;
-
-// const nodemailer = require("nodemailer");
-
-// const transporter = nodemailer.createTransport({
-//   host: process.env.SMTP_HOST,
-//   port: Number(process.env.SMTP_PORT || 2525),
-//   auth: {
-//     user: process.env.SMTP_USER,
-//     pass: process.env.SMTP_PASS,
-//   },
-// });
-
-// /**
-//  * Giữ nguyên logic cũ: Send({to, subject, html}, cb)
-//  */
-// module.exports = function send(options, cb) {
-//   transporter.sendMail(
-//     {
-//       from: process.env.FROM_EMAIL || "no-reply@boutique.local",
-//       to: options.to,
-//       subject: options.subject,
-//       html: options.html,
-//     },
-//     cb
-//   );
-// };
