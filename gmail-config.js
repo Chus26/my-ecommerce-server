@@ -1,55 +1,125 @@
+// // const send = require("gmail-send")({
+// //   user: "danvulop8@gmail.com",
+// //   pass: process.env.GMAIL_PASS,
+// // });
+
+// // module.exports = send;
+
+// const nodemailer = require("nodemailer");
+
+// const transporter = nodemailer.createTransport({
+//   service: "gmail", // Dùng preset 'gmail' cho chuẩn
+//   auth: {
+//     user: "danvulop8@gmail.com",
+//     pass: process.env.GMAIL_PASS,
+//   },
+//   // 👇 CÁC DÒNG QUAN TRỌNG ĐỂ FIX TIMEOUT TRÊN RENDER 👇
+//   family: 4,              // Ép buộc dùng IPv4 (Fix lỗi chính)
+//   networkTimeout: 10000,  // Tăng thời gian chờ mạng lên 10s
+//   connectionTimeout: 10000,
+//   tls: {
+//     rejectUnauthorized: false // Bỏ qua lỗi chứng chỉ SSL nếu có
+//   }
+// });
+
+// const send = async ({ to, subject, html }) => {
+//   try {
+//     console.log("⏳ Đang gửi mail tới:", to);
+//     const info = await transporter.sendMail({
+//       from: '"Boutique Shop" <danvulop8@gmail.com>',
+//       to: to,
+//       subject: subject,
+//       html: html,
+//     });
+//     console.log("✅ Email sent successfully:", info.messageId);
+//     return info;
+//   } catch (error) {
+//     console.error("❌ Error sending email:", error);
+//     return null;
+//   }
+// };
+
+// module.exports = send;
+
+// // const nodemailer = require("nodemailer");
+
+// // const transporter = nodemailer.createTransport({
+// //   host: process.env.SMTP_HOST,
+// //   port: Number(process.env.SMTP_PORT || 2525),
+// //   auth: {
+// //     user: process.env.SMTP_USER,
+// //     pass: process.env.SMTP_PASS,
+// //   },
+// // });
+
+// // /**
+// //  * Giữ nguyên logic cũ: Send({to, subject, html}, cb)
+// //  */
+// // module.exports = function send(options, cb) {
+// //   transporter.sendMail(
+// //     {
+// //       from: process.env.FROM_EMAIL || "no-reply@boutique.local",
+// //       to: options.to,
+// //       subject: options.subject,
+// //       html: options.html,
+// //     },
+// //     cb
+// //   );
+// // };
+
 const nodemailer = require("nodemailer");
 
-// Kiểm tra xem đang chạy trên Render (Production) hay Local
-const isProduction = process.env.NODE_ENV === "production";
+// LOGIC THÔNG MINH: Có chìa khóa Brevo thì dùng Brevo, không thì về Gmail
+const useBrevo = process.env.BREVO_PASS && process.env.BREVO_PASS.length > 0;
 
 let transporter;
 
-if (isProduction) {
+if (useBrevo) {
   // ============================================
-  // CẤU HÌNH CHO RENDER (Dùng Brevo SMTP)
+  // CẤU HÌNH BREVO (Dành cho Render)
   // ============================================
-  console.log("🚀 Server Mode: PRODUCTION -> Dùng BREVO để gửi mail (Fix lỗi Timeout)");
+  console.log("🚀 PRODUCTION -> Dùng BREVO SMTP");
   transporter = nodemailer.createTransport({
-    host: "smtp-relay.brevo.com",  // Server của Brevo
-    port: 587,                     // Cổng chuẩn quốc tế
-    secure: false,                 // false cho port 587
+    host: "smtp-relay.brevo.com",
+    port: 587,
+    secure: false,
     auth: {
-      user: "danvulop8@gmail.com", // Email login Brevo
-      pass: process.env.BREVO_PASS, // Biến môi trường chứa Key Brevo
+      // 👇 QUAN TRỌNG: Brevo dùng Email login, KHÔNG PHẢI "apikey"
+      user: "danvulop8@gmail.com", 
+      pass: process.env.BREVO_PASS,
     },
     tls: {
-      rejectUnauthorized: false    // Tránh lỗi chứng chỉ SSL
+      rejectUnauthorized: false
     }
   });
 } else {
   // ============================================
-  // CẤU HÌNH CHO LOCALHOST (Dùng Gmail)
+  // CẤU HÌNH GMAIL (Dành cho Localhost)
   // ============================================
-  console.log("💻 Server Mode: DEV -> Dùng GMAIL như cũ");
+  console.log("💻 DEV -> Dùng GMAIL SMTP");
   transporter = nodemailer.createTransport({
     service: "gmail",
     auth: {
       user: "danvulop8@gmail.com",
-      pass: process.env.GMAIL_PASS, // Biến môi trường chứa App Password Gmail
+      pass: process.env.GMAIL_PASS,
     },
   });
 }
 
 const send = async ({ to, subject, html }) => {
   try {
-    console.log(`⏳ Đang gửi mail tới: ${to}...`);
     const info = await transporter.sendMail({
-      from: '"Boutique Shop Support" <danvulop8@gmail.com>',
-      to: to,
-      subject: subject,
-      html: html,
+      // 👇 Dùng chính mail của bạn để không bị Brevo chặn
+      from: '"Boutique Shop" <danvulop8@gmail.com>', 
+      to,
+      subject,
+      html,
     });
-    console.log("✅ Gửi mail THÀNH CÔNG! MessageID:", info.messageId);
+    console.log("✅ Gửi mail thành công! MessageID:", info.messageId);
     return info;
-  } catch (error) {
-    console.error("❌ Gửi mail THẤT BẠI:", error);
-    return null; // Trả về null để không làm crash server
+  } catch (err) {
+    console.error("❌ Lỗi gửi mail:", err.message);
+    return null;
   }
 };
 
