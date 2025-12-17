@@ -1,68 +1,56 @@
-// const send = require("gmail-send")({
-//   user: "danvulop8@gmail.com",
-//   pass: process.env.GMAIL_PASS,
-// });
-
-// module.exports = send;
-
 const nodemailer = require("nodemailer");
 
-const transporter = nodemailer.createTransport({
-  service: "gmail", // Dùng preset 'gmail' cho chuẩn
-  auth: {
-    user: "danvulop8@gmail.com",
-    pass: process.env.GMAIL_PASS,
-  },
-  // 👇 CÁC DÒNG QUAN TRỌNG ĐỂ FIX TIMEOUT TRÊN RENDER 👇
-  family: 4,              // Ép buộc dùng IPv4 (Fix lỗi chính)
-  networkTimeout: 10000,  // Tăng thời gian chờ mạng lên 10s
-  connectionTimeout: 10000,
-  tls: {
-    rejectUnauthorized: false // Bỏ qua lỗi chứng chỉ SSL nếu có
-  }
-});
+// Kiểm tra xem đang chạy trên Render (Production) hay Local
+const isProduction = process.env.NODE_ENV === "production";
+
+let transporter;
+
+if (isProduction) {
+  // ============================================
+  // CẤU HÌNH CHO RENDER (Dùng Brevo SMTP)
+  // ============================================
+  console.log("🚀 Server Mode: PRODUCTION -> Dùng BREVO để gửi mail (Fix lỗi Timeout)");
+  transporter = nodemailer.createTransport({
+    host: "smtp-relay.brevo.com",  // Server của Brevo
+    port: 587,                     // Cổng chuẩn quốc tế
+    secure: false,                 // false cho port 587
+    auth: {
+      user: "danvulop8@gmail.com", // Email login Brevo
+      pass: process.env.BREVO_PASS, // Biến môi trường chứa Key Brevo
+    },
+    tls: {
+      rejectUnauthorized: false    // Tránh lỗi chứng chỉ SSL
+    }
+  });
+} else {
+  // ============================================
+  // CẤU HÌNH CHO LOCALHOST (Dùng Gmail)
+  // ============================================
+  console.log("💻 Server Mode: DEV -> Dùng GMAIL như cũ");
+  transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: "danvulop8@gmail.com",
+      pass: process.env.GMAIL_PASS, // Biến môi trường chứa App Password Gmail
+    },
+  });
+}
 
 const send = async ({ to, subject, html }) => {
   try {
-    console.log("⏳ Đang gửi mail tới:", to);
+    console.log(`⏳ Đang gửi mail tới: ${to}...`);
     const info = await transporter.sendMail({
-      from: '"Boutique Shop" <danvulop8@gmail.com>',
+      from: '"Boutique Shop Support" <danvulop8@gmail.com>',
       to: to,
       subject: subject,
       html: html,
     });
-    console.log("✅ Email sent successfully:", info.messageId);
+    console.log("✅ Gửi mail THÀNH CÔNG! MessageID:", info.messageId);
     return info;
   } catch (error) {
-    console.error("❌ Error sending email:", error);
-    return null;
+    console.error("❌ Gửi mail THẤT BẠI:", error);
+    return null; // Trả về null để không làm crash server
   }
 };
 
 module.exports = send;
-
-// const nodemailer = require("nodemailer");
-
-// const transporter = nodemailer.createTransport({
-//   host: process.env.SMTP_HOST,
-//   port: Number(process.env.SMTP_PORT || 2525),
-//   auth: {
-//     user: process.env.SMTP_USER,
-//     pass: process.env.SMTP_PASS,
-//   },
-// });
-
-// /**
-//  * Giữ nguyên logic cũ: Send({to, subject, html}, cb)
-//  */
-// module.exports = function send(options, cb) {
-//   transporter.sendMail(
-//     {
-//       from: process.env.FROM_EMAIL || "no-reply@boutique.local",
-//       to: options.to,
-//       subject: options.subject,
-//       html: options.html,
-//     },
-//     cb
-//   );
-// };
