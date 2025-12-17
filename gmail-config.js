@@ -1,24 +1,30 @@
-// Thay thế toàn bộ nội dung file cũ bằng đoạn này:
+// const send = require("gmail-send")({
+//   user: "danvulop8@gmail.com",
+//   pass: process.env.GMAIL_PASS,
+// });
+
+// module.exports = send;
+
 const nodemailer = require("nodemailer");
 
-// Tạo transporter với cấu hình Port 587 (TLS) để không bị Render chặn
 const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false, // false cho port 587, true cho port 465
+  service: "gmail", // Dùng preset 'gmail' cho chuẩn
   auth: {
     user: "danvulop8@gmail.com",
-    // Đảm bảo biến môi trường này đã được đặt trên Render
-    pass: process.env.GMAIL_PASS, 
+    pass: process.env.GMAIL_PASS,
   },
+  // 👇 CÁC DÒNG QUAN TRỌNG ĐỂ FIX TIMEOUT TRÊN RENDER 👇
+  family: 4,              // Ép buộc dùng IPv4 (Fix lỗi chính)
+  networkTimeout: 10000,  // Tăng thời gian chờ mạng lên 10s
+  connectionTimeout: 10000,
   tls: {
-    rejectUnauthorized: false // Giúp tránh lỗi chứng chỉ SSL trên server
+    rejectUnauthorized: false // Bỏ qua lỗi chứng chỉ SSL nếu có
   }
 });
 
-// Tạo hàm send tương thích với cách gọi cũ của bạn
 const send = async ({ to, subject, html }) => {
   try {
+    console.log("⏳ Đang gửi mail tới:", to);
     const info = await transporter.sendMail({
       from: '"Boutique Shop" <danvulop8@gmail.com>',
       to: to,
@@ -29,9 +35,34 @@ const send = async ({ to, subject, html }) => {
     return info;
   } catch (error) {
     console.error("❌ Error sending email:", error);
-    // Không ném lỗi để tránh crash server nếu mail lỗi
-    return null; 
+    return null;
   }
 };
 
 module.exports = send;
+
+// const nodemailer = require("nodemailer");
+
+// const transporter = nodemailer.createTransport({
+//   host: process.env.SMTP_HOST,
+//   port: Number(process.env.SMTP_PORT || 2525),
+//   auth: {
+//     user: process.env.SMTP_USER,
+//     pass: process.env.SMTP_PASS,
+//   },
+// });
+
+// /**
+//  * Giữ nguyên logic cũ: Send({to, subject, html}, cb)
+//  */
+// module.exports = function send(options, cb) {
+//   transporter.sendMail(
+//     {
+//       from: process.env.FROM_EMAIL || "no-reply@boutique.local",
+//       to: options.to,
+//       subject: options.subject,
+//       html: options.html,
+//     },
+//     cb
+//   );
+// };
