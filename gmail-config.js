@@ -69,56 +69,57 @@
 
 const nodemailer = require("nodemailer");
 
-// LOGIC THÔNG MINH: Có chìa khóa Brevo thì dùng Brevo, không thì về Gmail
-const useBrevo = process.env.BREVO_PASS && process.env.BREVO_PASS.length > 0;
+// 👇 LOGIC CHUẨN: Chỉ dùng Brevo khi đang ở trên Server (Production)
+// Localhost (Development) sẽ luôn dùng Gmail cho lành.
+const isProduction = process.env.NODE_ENV === 'production';
 
 let transporter;
 
-if (useBrevo) {
+if (isProduction) {
   // ============================================
-  // CẤU HÌNH BREVO (Dành cho Render)
+  // CẤU HÌNH BREVO (CHỈ CHẠY TRÊN RENDER)
   // ============================================
-  console.log("🚀 PRODUCTION -> Dùng BREVO SMTP");
+  console.log("🚀 MÔI TRƯỜNG PRODUCTION -> Dùng BREVO SMTP");
   transporter = nodemailer.createTransport({
     host: "smtp-relay.brevo.com",
     port: 587,
     secure: false,
     auth: {
-      // 👇 QUAN TRỌNG: Brevo dùng Email login, KHÔNG PHẢI "apikey"
       user: "danvulop8@gmail.com", 
       pass: process.env.BREVO_PASS,
     },
-    tls: {
-      rejectUnauthorized: false
-    }
+    tls: { rejectUnauthorized: false }
   });
 } else {
   // ============================================
-  // CẤU HÌNH GMAIL (Dành cho Localhost)
+  // CẤU HÌNH GMAIL (CHẠY LOCALHOST)
   // ============================================
-  console.log("💻 DEV -> Dùng GMAIL SMTP");
+  console.log("💻 MÔI TRƯỜNG DEV -> Dùng GMAIL SMTP (Chạy ngon ở Local)");
   transporter = nodemailer.createTransport({
     service: "gmail",
     auth: {
       user: "danvulop8@gmail.com",
-      pass: process.env.GMAIL_PASS,
+      pass: process.env.GMAIL_PASS, // Đảm bảo file .env có GMAIL_PASS
     },
   });
 }
 
 const send = async ({ to, subject, html }) => {
   try {
+    console.log(`📨 Đang gửi đến: ${to}`);
+    // Check xem đang dùng cái gì để gửi
+    console.log(`🔧 Server đang dùng: ${isProduction ? "BREVO" : "GMAIL"}`);
+
     const info = await transporter.sendMail({
-      // 👇 Dùng chính mail của bạn để không bị Brevo chặn
-      from: '"Boutique Shop" <danvulop8@gmail.com>', 
+      from: '"Boutique Shop" <danvulop8@gmail.com>',
       to,
       subject,
       html,
     });
-    console.log("✅ Gửi mail thành công! MessageID:", info.messageId);
+    console.log("✅ Gửi thành công! MessageID:", info.messageId);
     return info;
   } catch (err) {
-    console.error("❌ Lỗi gửi mail:", err.message);
+    console.error("❌ Gửi thất bại:", err.message);
     return null;
   }
 };
