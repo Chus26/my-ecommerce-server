@@ -69,24 +69,26 @@
 
 const nodemailer = require("nodemailer");
 
-// 👇 LOGIC CHUẨN: Chỉ dùng Brevo khi đang ở trên Server (Production)
-// Localhost (Development) sẽ luôn dùng Gmail cho lành.
-const isProduction = process.env.NODE_ENV === 'production';
+// 👇 LOGIC SIÊU CHUẨN:
+// 1. process.env.RENDER: Biến này Render tự động có (Local không có).
+// 2. process.env.NODE_ENV === 'production': Cách kiểm tra truyền thống.
+// => Chỉ cần 1 trong 2 cái đúng là biết đang ở trên Server.
+const isOnServer = process.env.RENDER || process.env.NODE_ENV === 'production';
 
 let transporter;
 
-if (isProduction) {
+if (isOnServer) {
   // ============================================
-  // CẤU HÌNH BREVO (CHỈ CHẠY TRÊN RENDER)
+  // CẤU HÌNH BREVO (CHẠY TRÊN RENDER)
   // ============================================
-  console.log("🚀 MÔI TRƯỜNG PRODUCTION -> Dùng BREVO SMTP");
+  console.log("🚀 PHÁT HIỆN SERVER RENDER -> Dùng BREVO SMTP");
   transporter = nodemailer.createTransport({
     host: "smtp-relay.brevo.com",
     port: 587,
     secure: false,
     auth: {
       user: "danvulop8@gmail.com", 
-      pass: process.env.BREVO_PASS,
+      pass: process.env.BREVO_PASS, // Đảm bảo Render đã có biến này
     },
     tls: { rejectUnauthorized: false }
   });
@@ -94,12 +96,12 @@ if (isProduction) {
   // ============================================
   // CẤU HÌNH GMAIL (CHẠY LOCALHOST)
   // ============================================
-  console.log("💻 MÔI TRƯỜNG DEV -> Dùng GMAIL SMTP (Chạy ngon ở Local)");
+  console.log("💻 PHÁT HIỆN LOCALHOST -> Dùng GMAIL SMTP");
   transporter = nodemailer.createTransport({
     service: "gmail",
     auth: {
       user: "danvulop8@gmail.com",
-      pass: process.env.GMAIL_PASS, // Đảm bảo file .env có GMAIL_PASS
+      pass: process.env.GMAIL_PASS, // Local dùng App Password
     },
   });
 }
@@ -107,8 +109,7 @@ if (isProduction) {
 const send = async ({ to, subject, html }) => {
   try {
     console.log(`📨 Đang gửi đến: ${to}`);
-    // Check xem đang dùng cái gì để gửi
-    console.log(`🔧 Server đang dùng: ${isProduction ? "BREVO" : "GMAIL"}`);
+    console.log(`🔧 Chế độ gửi: ${isOnServer ? "BREVO (Server)" : "GMAIL (Local)"}`);
 
     const info = await transporter.sendMail({
       from: '"Boutique Shop" <danvulop8@gmail.com>',
@@ -116,7 +117,7 @@ const send = async ({ to, subject, html }) => {
       subject,
       html,
     });
-    console.log("✅ Gửi thành công! MessageID:", info.messageId);
+    console.log("✅ Gửi thành công! ID:", info.messageId);
     return info;
   } catch (err) {
     console.error("❌ Gửi thất bại:", err.message);
