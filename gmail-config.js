@@ -67,49 +67,73 @@
 // //   );
 // // };
 
+const axios = require("axios");
 const nodemailer = require("nodemailer");
 
-// 👇 LOGIC SIÊU CHUẨN:
-// 1. process.env.RENDER: Biến này Render tự động có (Local không có).
-// 2. process.env.NODE_ENV === 'production': Cách kiểm tra truyền thống.
-// => Chỉ cần 1 trong 2 cái đúng là biết đang ở trên Server.
-const isOnServer = process.env.RENDER || process.env.NODE_ENV === 'production';
+// ===============================
+// Detect môi trường (Server hay Local)
+// ===============================
+const isOnServer = process.env.RENDER || process.env.NODE_ENV === "production";
 
-let transporter;
-
-if (isOnServer) {
-  // ============================================
-  // CẤU HÌNH BREVO (CHẠY TRÊN RENDER)
-  // ============================================
-  console.log("🚀 PHÁT HIỆN SERVER RENDER -> Dùng BREVO SMTP");
-  transporter = nodemailer.createTransport({
-    host: "smtp-relay.brevo.com",
-    port: 587,
-    secure: false,
-    auth: {
-      user: "danvulop8@gmail.com", 
-      pass: process.env.BREVO_PASS, // Đảm bảo Render đã có biến này
-    },
-    tls: { rejectUnauthorized: false }
-  });
-} else {
-  // ============================================
-  // CẤU HÌNH GMAIL (CHẠY LOCALHOST)
-  // ============================================
-  console.log("💻 PHÁT HIỆN LOCALHOST -> Dùng GMAIL SMTP");
-  transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: "danvulop8@gmail.com",
-      pass: process.env.GMAIL_PASS, // Local dùng App Password
-    },
-  });
-}
-
-const send = async ({ to, subject, html }) => {
+/**
+ * ==========================================
+ * SEND MAIL BẰNG BREVO API (DÀNH CHO RENDER)
+ * Cách này dùng HTTP (Cổng 443) nên không bao giờ bị chặn
+ * ==========================================
+ */
+const sendByBrevoAPI = async ({ to, subject, html }) => {
   try {
-    console.log(`📨 Đang gửi đến: ${to}`);
-    console.log(`🔧 Chế độ gửi: ${isOnServer ? "BREVO (Server)" : "GMAIL (Local)"}`);
+    console.log("🚀 SERVER: Gửi mail bằng BREVO API (HTTP)");
+
+    const res = await axios.post(
+      "https://api.brevo.com/v3/smtp/email",
+      {
+        sender: {
+          name: "Boutique Shop", // Tên hiển thị khi nhận mail
+          email: "danvulop8@gmail.com", // Email đã xác thực trong Brevo
+        },
+        to: [{ email: to }],
+        subject,
+        htmlContent: html,
+      },
+      {
+        headers: {
+          "api-key": process.env.BREVO_API_KEY, // Lấy từ biến môi trường
+          "Content-Type": "application/json",
+        },
+        timeout: 10000, // Tự ngắt sau 10s nếu treo
+      }
+    );
+
+    console.log("✅ BREVO API gửi thành công. MessageID:", res.data.messageId);
+    return res.data;
+  } catch (err) {
+    console.error(
+      "❌ BREVO API gửi thất bại:",
+      err.response?.data || err.message
+    );
+    // Lưu ý: Không throw lỗi để tránh crash app, chỉ log ra console
+    return null;
+  }
+};
+
+/**
+ * ==========================================
+ * SEND MAIL BẰNG GMAIL SMTP (DÀNH CHO LOCAL)
+ * Cách này tiện lợi khi test ở máy nhà
+ * ==========================================
+ */
+const sendByGmailSMTP = async ({ to, subject, html }) => {
+  try {
+    console.log("💻 LOCAL: Gửi mail bằng GMAIL SMTP");
+
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.GMAIL_USER || "danvulop8@gmail.com",
+        pass: process.env.GMAIL_PASS, // App Password 16 ký tự
+      },
+    });
 
     const info = await transporter.sendMail({
       from: '"Boutique Shop" <danvulop8@gmail.com>',
@@ -117,11 +141,27 @@ const send = async ({ to, subject, html }) => {
       subject,
       html,
     });
-    console.log("✅ Gửi thành công! ID:", info.messageId);
+
+    console.log("✅ GMAIL gửi thành công:", info.messageId);
     return info;
   } catch (err) {
-    console.error("❌ Gửi thất bại:", err.message);
+    console.error("❌ GMAIL gửi thất bại:", err.message);
     return null;
+  }
+};
+
+/**
+ * ==========================================
+ * HÀM SEND CHÍNH (CONTROLLER GỌI HÀM NÀY)
+ * ==========================================
+ */
+const send = async ({ to, subject, html }) => {
+  console.log(`📨 Đang gửi đến: ${to}`);
+  // Tự động chọn cách gửi dựa trên môi trường
+  if (isOnServer) {
+    return await sendByBrevoAPI({ to, subject, html });
+  } else {
+    return await sendByGmailSMTP({ to, subject, html });
   }
 };
 
